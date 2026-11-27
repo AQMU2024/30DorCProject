@@ -32,6 +32,23 @@ def lineToPoints(data, line, n):
     values = [data[y][x] for (x,y) in points]
     return points, values
 
+def cleanDegenerates(points):
+    i = -1
+    del_index = []
+    for checkpoint in points:
+        i += 1
+        print(i)
+        if i in del_index:
+            print("SKIP")
+            continue
+        j = 0
+        for point in points:
+            if np.all([point[1], point[0]] == checkpoint):
+                del_index.append(j)
+            else:
+                j += 1
+
+    return np.delete(points, del_index, 0)
 
 # Import and open the fits file.
 file = '../Data/Visible/subtracted.fits' 
@@ -43,7 +60,7 @@ wcs = WCS(hdu.header).dropaxis(2).dropaxis(2)
 data = hdu.data[0][0][40:330,40:330]
 
 shape = data.shape # Find the shape of the data table.
-n_points = 10 # Number of points to draw
+n_points = 5# Number of points to draw
 
 x_arr = []
 y_arr = []
@@ -52,7 +69,7 @@ y = 0
 
 # Generate random points along the edge of the image
 for c in range(n_points):
-    side = np.random.randint(4)
+    side = np.random.randint(0,4)
     
     offset = 10
     # If a certain side is picked, pick a random coordinae along that side.
@@ -80,13 +97,12 @@ start_end = np.array([(start, end) for start in point_arr for end in point_arr])
 start_end_sc = np.array([(start, end) for start in sc_arr for end in sc_arr])
 
 dist_start_end = [taxicab(start, end) for start in point_arr for end in point_arr]
-taxicab_filter = dist_start_end > np.max(shape)
+taxicab_filter = dist_start_end > np.max(shape)*0.75
 
-se_sc_filt = np.array(start_end_sc[taxicab_filter])
-se_sc_filt = se_sc_filt
+se_sc_filt = np.array(start_end_sc)[taxicab_filter]
+se_sc_filt = cleanDegenerates(se_sc_filt)
 
-lines = [LineSkyRegion(start, end) for (start,end) in se_sc_filt][::4]
-print(lines)
+lines = [LineSkyRegion(start, end) for (start,end) in se_sc_filt]
 
 
 
@@ -95,23 +111,26 @@ line_pixels = [line.to_pixel(wcs=wcs) for line in lines]
 gauss_kernel = Gaussian2DKernel(2)
 smoothed_data = convolve(data,gauss_kernel)
 
-fig = plt.figure()
-ax = fig.add_subplot(projection=wcs)
-ax.set_facecolor('black')
-ax.set_ylabel('Dec (J2000)')
-ax.set_xlabel('RA (J2000)')
-im = ax.imshow(smoothed_data, origin='lower', norm=clrs.LogNorm(vmin=1, vmax=8), cmap='hot')
-cbar = fig.colorbar(mappable=im, label="Counts")
-
-for line in line_pixels:
-    line.plot(ax=ax, linewidth=1, color='w', alpha=0.25)
-    
 for line in lines:
     points, values = lineToPoints(smoothed_data, line, 100)
     n_pix = range(len(points))
     
     fig, ax = plt.subplots()
     ax.plot(n_pix, values, c='k', linewidth=1)
+
+fig = plt.figure()
+ax = fig.add_subplot(projection=wcs)
+ax.set_facecolor('black')
+ax.set_ylabel('Dec (J2000)')
+ax.set_xlabel('RA (J2000)')
+im = ax.imshow(smoothed_data, origin='lower', norm=clrs.LogNorm(vmin=1, vmax=8), cmap='hot')
+ax.scatter(start_end.T[0], start_end.T[1], s=10, c='cyan', marker='x', linewidth=0.2)
+cbar = fig.colorbar(mappable=im, label="Counts")
+
+for line in line_pixels:
+    line.plot(ax=ax, linewidth=1, color='w', alpha=0.25)
+    
+
     
 
 
